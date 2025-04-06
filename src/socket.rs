@@ -59,6 +59,20 @@ unsafe extern "C" {
     fn close(fd: i32) -> i32;
 }
 
+#[derive(Debug, PartialEq)]
+pub enum SocketState {
+    Created,
+    Bound,
+    Lisrening,
+    Connected,
+    Closed
+}
+
+pub struct Socket {
+    fd: RawFd,
+    state: SocketState
+}
+
 fn create_socket() -> RawFd {
     let fd = unsafe { socket(AF_INET, SOCK_STREAM, 0) };
 
