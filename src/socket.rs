@@ -1,5 +1,5 @@
-use libc::{in_addr, sockaddr, sockaddr_in, socklen_t, AF_INET, INADDR_ANY, SOCK_STREAM};
-use std::{mem, os::unix::io::RawFd};
+use libc::{in_addr, sockaddr, sockaddr_in, socklen_t, AF_INET, SOCK_STREAM};
+use std::{mem, net::Ipv4Addr, os::unix::io::RawFd};
 
 unsafe extern "C" {
     // domain: Communication domain (AF_INET = IPv4).
@@ -74,7 +74,7 @@ pub struct Socket {
 }
 
 impl Socket {
-    fn new() -> Result<Self, String> {
+    pub fn new() -> Result<Self, String> {
         let fd = unsafe { socket(AF_INET, SOCK_STREAM, 0) };
 
         if fd == -1 {
@@ -86,33 +86,39 @@ impl Socket {
             })
         }
     }
-}
 
+    pub fn bind_socket(&mut self, ip: &str, port: u16) -> Result<(), String> {
+        if self.state != SocketState::Created {
+            return Err("Socket already bound our connected".into());
+        }
+        let ip: Ipv4Addr = ip.parse().map_err(|_| "Ivalid IP address")?;
+        // create IPv4 address
+        // TODO: make portable to support different platforms
+        let addr = sockaddr_in {
+            sin_len: mem::size_of::<sockaddr_in>() as u8, // length of the socket address strcut itself - only used on macOS
+            sin_family: AF_INET as u8, // IPv4 address family (u8 on MacOS, u16 on Linux)
+            sin_port: port.to_be(),    // port in big-endian notation
+            sin_addr: in_addr {
+                s_addr: u32::from(ip).to_be(),
+            }, // address to bind to INADDR_ANY - all addresses 0.0.0.0
+            sin_zero: [0; 8],          // padding initalized to zero's
+        };
 
-fn bind_socket(fd: RawFd, port: u16) {
-    // create IPv4 address
-    // TODO: make portable to support different platforms
-    let addr = sockaddr_in {
-        sin_len: mem::size_of::<sockaddr_in>() as u8, // length of the socket address strcut itself - only used on macOS
-        sin_family: AF_INET as u8, // IPv4 address family (u8 on MacOS, u16 on Linux)
-        sin_port: port.to_be(),    // port in big-endian notation
-        sin_addr: in_addr { s_addr: INADDR_ANY }, // address to bind to INADDR_ANY - all addresses 0.0.0.0
-        sin_zero: [0; 8],                         // padding initalized to zero's
-    };
+        let res = unsafe {
+            bind(
+                self.fd,
+                &addr as *const sockaddr_in as *const sockaddr,
+                mem::size_of::<sockaddr_in>() as u32,
+            )
+        };
 
-    let res = unsafe {
-        bind(
-            fd,
-            &addr as *const sockaddr_in as *const sockaddr,
-            mem::size_of::<sockaddr_in>() as u32,
-        )
-    };
+        if res == -1 {
+            return Err("Failed to bind socket".into());
+        }
 
-    if res == -1 {
-        panic!("Failed to bind the socket");
+        self.state == SocketState::Bound;
+        Ok(())
     }
-
-    println!("Socket bound successfully to port: {}", port);
 }
 
 fn listen_socket(fd: RawFd) {
@@ -158,14 +164,18 @@ mod tests {
     #[test]
     fn test_can_create_socket() {
         let sock = Socket::new();
-        assert_eq!(sock.is_ok(), true, "retured a file descriptor with a value of -1");
+        assert_eq!(
+            sock.is_ok(),
+            true,
+            "retured a file descriptor with a value of -1"
+        );
     }
 
     #[test]
     fn test_bind_socket_to_port() {
-        let sock = Socket::new().expect("Failed to create socket");
+        let mut sock = Socket::new().expect("Failed to create socket");
         // use 0 to allow the use to chose an avaiable ephepermal port
-        bind_socket(sock.fd, 0);
+        let _ = sock.bind_socket("0.0.0.0", 0);
         // close the socket after use
         unsafe {
             close(sock.fd);
@@ -173,23 +183,27 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Failed to bind the socket")]
     fn test_bind_socket_invalid_fd() {
         // passing invalid socket descriptor
-        bind_socket(-1, 0);
+        let mut sock = Socket::new().expect("Failed to create socket");
+        // use 0 to allow the use to chose an avaiable ephepermal port
+        let res = sock.bind_socket("-dvddfvfdvdvd0.0.0.0", 0);
+
+        assert_eq!(res.is_err(), true, "Should fail to bind scoket")
     }
 
     #[test]
-    #[should_panic(expected = "Failed to bind the socket")]
     fn test_bind_socket_port_in_use() {
-        let sock_1 = Socket::new().expect("Failed to create socket");
-        let sock_2 = Socket::new().expect("Failed to create socket");
+        let mut sock_1 = Socket::new().expect("Failed to create socket");
+        let mut sock_2 = Socket::new().expect("Failed to create socket");
 
         // bind first soccket
-        bind_socket(sock_1.fd, 1150);
-
+        let res1 = sock_1.bind_socket("0.0.0.0", 1150);
         // bind second sock to the same port
-        bind_socket(sock_2.fd, 1150);
+        let res2 = sock_2.bind_socket("0.0.0.0", 1150);
+
+        assert_eq!(res1.is_ok(), true, "Failed to bind socket to port");
+        assert_ne!(res2.is_ok(), true, "Bound socket to port successfully");
 
         unsafe {
             close(sock_1.fd);
