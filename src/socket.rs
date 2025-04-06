@@ -26,7 +26,7 @@ unsafe extern "C" {
     // sockfd: file descriptor for the socket
     // addr: A pointer to a client socket address structure
     // addrlen The size (in bytes) of the client socket address structure pointed to by addr
-    fn connect(sockfd: i32, addr: *mut sockaddr, addrlen: *const socklen_t) -> i32;
+    fn connect(sockfd: i32, addr: *const sockaddr, addrlen: *const socklen_t) -> i32;
 
     // sockfd: file descriptor for the socket
     // buf: a pointer to a buffer that holds the data
@@ -150,6 +150,39 @@ impl Socket {
             fd: client_fd,
             state: SocketState::Connected,
         })
+    }
+
+    pub fn connect(&mut self, ip: &str, port: u16) -> Result<(), String> {
+        if self.state != SocketState::Created {
+            return Err("Socket already bound or connected".into());
+        }
+        let ip: Ipv4Addr = ip.parse().map_err(|_| "Ivalid IP address")?;
+        // create IPv4 address
+        // TODO: make portable to support different platforms
+        let addr = sockaddr_in {
+            sin_len: mem::size_of::<sockaddr_in>() as u8, // length of the socket address strcut itself - only used on macOS
+            sin_family: AF_INET as u8, // IPv4 address family (u8 on MacOS, u16 on Linux)
+            sin_port: port.to_be(),    // port in big-endian notation
+            sin_addr: in_addr {
+                s_addr: u32::from(ip).to_be(),
+            }, // address to bind to INADDR_ANY - all addresses 0.0.0.0
+            sin_zero: [0; 8],          // padding initalized to zero's
+        };
+
+        let res = unsafe {
+            connect(
+                self.fd,
+                &addr as *const sockaddr_in as *const sockaddr,
+                mem::size_of::<sockaddr_in>() as *const u32,
+            )
+        };
+
+        if res == -1 {
+            return Err("Failed to connect to address".into());
+        }
+
+        self.state = SocketState::Connected;
+        Ok(())
     }
 }
 
