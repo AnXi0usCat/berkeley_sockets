@@ -22,6 +22,38 @@ unsafe extern "C" {
     // addrlen The size (in bytes) of the client socket address structure pointed to by addr
     fn accept(sockfd: i32, addr: *mut sockaddr, addrlen: *mut socklen_t) -> i32;
 
+    // connects to a remote TCP socket
+    // sockfd: file descriptor for the socket
+    // addr: A pointer to a client socket address structure
+    // addrlen The size (in bytes) of the client socket address structure pointed to by addr
+    fn connect(sockfd: i32, addr: *mut sockaddr, addrlen: *const socklen_t) -> i32;
+
+    // sockfd: file descriptor for the socket
+    // buf: a pointer to a buffer that holds the data
+    // len: number of bytes in the buffer that you want to send
+    // flags: behaviour of sending data: usually set to 0
+    //- MSG_NOSIGNAL: Don't raise SIGPIPE signal if the peer closes the connection.
+    //- MSG_DONTWAIT: Perform non-blocking operation.
+    //- MSG_OOB: Send out-of-band data.
+    // returns:
+    // -Positive number: Number of bytes actually sent.
+    // - 0: Usually means connection closed (rare in send)
+    // - -1: An error occurred (errno will give details).
+    fn send(sockfd: i32, buf: *const u8, len: usize, flags: i32) -> isize;
+
+    // sockfd: file descriptor for the scoket to read data from
+    // A pointer to a buffer (*mut u8) where received data will be stored.
+    // Maximum length (capacity) of the buffer. Defines how many bytes you want to attempt to read.
+    // Flags controlling the receiving behavior, commonly 0. Possible flags include:
+    //- MSG_WAITALL: Block until the requested number of bytes are received.
+    //- MSG_DONTWAIT: Perform non-blocking operation.
+    //- MSG_OOB: Receive out-of-band data.
+    // returns:
+    //- Positive number: Number of bytes actually received and stored in buffer.
+    //- 0: Connection closed gracefully by peer.
+    //- -1: Error occurred (check errno).
+    fn recv(sockfd: i32, buf: *mut u8, len: usize, flags: i32) -> isize;
+
     // closes the socket
     // fd: raw file descriptor
     fn close(fd: i32) -> i32;
