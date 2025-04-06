@@ -116,7 +116,7 @@ impl Socket {
             return Err("Failed to bind socket".into());
         }
 
-        self.state == SocketState::Bound;
+        self.state = SocketState::Bound;
         Ok(())
     }
 }
