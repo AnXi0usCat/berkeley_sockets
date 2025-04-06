@@ -135,29 +135,22 @@ impl Socket {
         Ok(())
     }
 
-    pub fn accept() {
+    pub fn accept(&self) -> Result<Socket, String> {
+        if self.state != SocketState::Listening {
+            return Err("Socket is not listening".into());
+        }
 
+        let client_fd = unsafe { accept(self.fd, std::ptr::null_mut(), std::ptr::null_mut()) };
+
+        if client_fd == -1 {
+            return Err("Failed to accept connection".into());
+        }
+
+        Ok(Socket {
+            fd: client_fd,
+            state: SocketState::Connected,
+        })
     }
-}
-
-fn accept_connection(fd: RawFd) -> RawFd {
-    let mut client_addr: sockaddr_in = unsafe { mem::zeroed() };
-    let mut addr_len: u32 = mem::size_of::<sockaddr_in>() as u32;
-
-    let client_fd = unsafe {
-        accept(
-            fd,
-            &mut client_addr as *mut sockaddr_in as *mut sockaddr,
-            &mut addr_len as *mut u32,
-        )
-    };
-
-    if client_fd == -1 {
-        panic!("Failed to accept connection");
-    }
-
-    println!("Connection accepted! CLient FD: {}", client_fd);
-    client_fd
 }
 
 fn close_socket(fd: RawFd) {
