@@ -63,7 +63,7 @@ unsafe extern "C" {
 pub enum SocketState {
     Created,
     Bound,
-    Lisrening,
+    Listening,
     Connected,
     Closed,
 }
@@ -87,7 +87,7 @@ impl Socket {
         }
     }
 
-    pub fn bind_socket(&mut self, ip: &str, port: u16) -> Result<(), String> {
+    pub fn bind(&mut self, ip: &str, port: u16) -> Result<(), String> {
         if self.state != SocketState::Created {
             return Err("Socket already bound our connected".into());
         }
@@ -120,19 +120,23 @@ impl Socket {
         Ok(())
     }
 
-    pub fn listen_socket(&mut self, backlog: i32) -> Result<(), String> {
+    pub fn listen(&mut self, backlog: i32) -> Result<(), String> {
         if self.state != SocketState::Bound {
             return Err("Socket must be bound before listening".into());
         }
 
-        let res = unsafe { listen(self.fd, 10) };
+        let res = unsafe { listen(self.fd, backlog) };
 
         if res == -1 {
             return Err("Failed to listen on socket".into());
         }
 
-        self.state = SocketState::Bound;
+        self.state = SocketState::Listening;
         Ok(())
+    }
+
+    pub fn accept() {
+
     }
 }
 
@@ -180,7 +184,7 @@ mod tests {
     fn test_bind_socket_to_port() {
         let mut sock = Socket::new().expect("Failed to create socket");
         // use 0 to allow the use to chose an avaiable ephepermal port
-        let _ = sock.bind_socket("0.0.0.0", 0);
+        let _ = sock.bind("0.0.0.0", 0);
         // close the socket after use
         unsafe {
             close(sock.fd);
@@ -192,7 +196,7 @@ mod tests {
         // passing invalid socket descriptor
         let mut sock = Socket::new().expect("Failed to create socket");
         // use 0 to allow the use to chose an avaiable ephepermal port
-        let res = sock.bind_socket("-dvddfvfdvdvd0.0.0.0", 0);
+        let res = sock.bind("-dvddfvfdvdvd0.0.0.0", 0);
 
         assert_eq!(res.is_err(), true, "Should fail to bind scoket")
     }
@@ -203,9 +207,9 @@ mod tests {
         let mut sock_2 = Socket::new().expect("Failed to create socket");
 
         // bind first soccket
-        let res1 = sock_1.bind_socket("0.0.0.0", 1150);
+        let res1 = sock_1.bind("0.0.0.0", 1150);
         // bind second sock to the same port
-        let res2 = sock_2.bind_socket("0.0.0.0", 1150);
+        let res2 = sock_2.bind("0.0.0.0", 1150);
 
         assert_eq!(res1.is_ok(), true, "Failed to bind socket to port");
         assert_ne!(res2.is_ok(), true, "Bound socket to port successfully");
