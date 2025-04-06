@@ -136,16 +136,6 @@ impl Socket {
     }
 }
 
-fn listen_socket(fd: RawFd) {
-    let res = unsafe { listen(fd, 10) };
-
-    if res == -1 {
-        panic!("Failed to listen on socket");
-    }
-
-    println!("Socket is now listening");
-}
-
 fn accept_connection(fd: RawFd) -> RawFd {
     let mut client_addr: sockaddr_in = unsafe { mem::zeroed() };
     let mut addr_len: u32 = mem::size_of::<sockaddr_in>() as u32;
