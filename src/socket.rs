@@ -153,9 +153,12 @@ impl Socket {
     }
 }
 
-fn close_socket(fd: RawFd) {
-    unsafe {
-        close(fd);
+impl Drop for Socket {
+    fn drop(&mut self) {
+        if self.state != SocketState::Closed {
+            unsafe { close(self.fd); }
+            self.state = SocketState::Closed;
+        }
     }
 }
 
