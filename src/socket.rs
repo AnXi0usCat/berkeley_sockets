@@ -119,6 +119,21 @@ impl Socket {
         self.state = SocketState::Bound;
         Ok(())
     }
+
+    pub fn listen_socket(&mut self, backlog: i32) -> Result<(), String> {
+        if self.state != SocketState::Bound {
+            return Err("Socket must be bound before listening".into());
+        }
+
+        let res = unsafe { listen(self.fd, 10) };
+
+        if res == -1 {
+            return Err("Failed to listen on socket".into());
+        }
+
+        self.state = SocketState::Bound;
+        Ok(())
+    }
 }
 
 fn listen_socket(fd: RawFd) {
