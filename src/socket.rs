@@ -65,24 +65,29 @@ pub enum SocketState {
     Bound,
     Lisrening,
     Connected,
-    Closed
+    Closed,
 }
 
 pub struct Socket {
     fd: RawFd,
-    state: SocketState
+    state: SocketState,
 }
 
-fn create_socket() -> RawFd {
-    let fd = unsafe { socket(AF_INET, SOCK_STREAM, 0) };
+impl Socket {
+    fn new() -> Result<Self, String> {
+        let fd = unsafe { socket(AF_INET, SOCK_STREAM, 0) };
 
-    if fd == -1 {
-        panic!("Failed to create a socket");
+        if fd == -1 {
+            Err("Failed to create a socket".into())
+        } else {
+            Ok(Socket {
+                fd,
+                state: SocketState::Created,
+            })
+        }
     }
-
-    println!("Socket created successfully! FD: {}", fd);
-    fd
 }
+
 
 fn bind_socket(fd: RawFd, port: u16) {
     // create IPv4 address
@@ -152,18 +157,18 @@ mod tests {
 
     #[test]
     fn test_can_create_socket() {
-        let fd = create_socket();
-        assert_ne!(fd, -1, "retured a file descriptor with a value of -1");
+        let sock = Socket::new();
+        assert_eq!(sock.is_ok(), true, "retured a file descriptor with a value of -1");
     }
 
     #[test]
     fn test_bind_socket_to_port() {
-        let fd = create_socket();
+        let sock = Socket::new().expect("Failed to create socket");
         // use 0 to allow the use to chose an avaiable ephepermal port
-        bind_socket(fd, 0);
+        bind_socket(sock.fd, 0);
         // close the socket after use
         unsafe {
-            close(fd);
+            close(sock.fd);
         }
     }
 
@@ -177,18 +182,18 @@ mod tests {
     #[test]
     #[should_panic(expected = "Failed to bind the socket")]
     fn test_bind_socket_port_in_use() {
-        let fd1 = create_socket();
-        let fd2 = create_socket();
+        let sock_1 = Socket::new().expect("Failed to create socket");
+        let sock_2 = Socket::new().expect("Failed to create socket");
 
         // bind first soccket
-        bind_socket(fd1, 1150);
+        bind_socket(sock_1.fd, 1150);
 
         // bind second sock to the same port
-        bind_socket(fd2, 1150);
+        bind_socket(sock_2.fd, 1150);
 
         unsafe {
-            close(fd1);
-            close(fd2);
+            close(sock_1.fd);
+            close(sock_2.fd);
         }
     }
 }
