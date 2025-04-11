@@ -228,7 +228,27 @@ impl Drop for Socket {
 
 #[cfg(test)]
 mod tests {
+    use std::thread;
+
+    use libc::thread_info;
+
     use super::*;
+
+    fn create_server(host: &str, port: u16) -> Socket {
+        let mut server_sock = Socket::new().expect("Failed to create socket.");
+        server_sock.bind(host, port).expect("Failed to bind to address.");
+        server_sock.listen(5).expect("Failed to listen to connections.");
+
+        println!("Listening at {}:{}", host, port);
+        server_sock
+    }
+
+    fn create_client(host: &str, port: u16) -> Socket {
+        let mut client_sock = Socket::new().expect("Failed to create socket");
+        client_sock.connect(host, port).expect("Failed to connect.");
+
+        client_sock
+    }
 
     #[test]
     fn test_can_create_socket() {
@@ -256,7 +276,7 @@ mod tests {
         // passing invalid socket descriptor
         let mut sock = Socket::new().expect("Failed to create socket");
         // use 0 to allow the use to chose an avaiable ephepermal port
-        let res = sock.bind("-dvddfvfdvdvd0.0.0.0", 0);
+        let res = sock.bind("", 0);
 
         assert_eq!(res.is_err(), true, "Should fail to bind scoket")
     }
@@ -278,5 +298,24 @@ mod tests {
             close(sock_1.fd);
             close(sock_2.fd);
         }
+    }
+
+    #[test]
+    fn test_send_receive() {
+        thread::scope(|sc| {
+            let server = create_server("127.0.0.1", 8000);
+
+            sc.spawn(|| {
+                let client = create_client("127.0.0.1", 8000);
+                let message = b"Hello Server";
+                client.send(message).expect("Send failed");
+            });
+
+            let client_sock = server.accept().expect("Failed to accept");
+
+            let mut buf = [0u8; 1024];
+            let recevied = client_sock.recieve(&mut buf).expect("Receive failed");
+            assert_eq!(String::from_utf8_lossy(&buf[..recevied]), "Hello Server");
+        });
     }
 }
