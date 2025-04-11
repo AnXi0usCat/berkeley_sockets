@@ -184,6 +184,37 @@ impl Socket {
         self.state = SocketState::Connected;
         Ok(())
     }
+
+    pub fn send(&self, data: &[u8]) -> Result<usize, String> {
+        if self.state != SocketState::Connected {
+            return Err("Socket not connected".into());
+        }
+
+        let bytes_sent = unsafe {
+            send(self.fd, data.as_ptr(), data.len(), 0)
+        };
+
+        if bytes_sent < 0 {
+            return Err("Failed to send data".into());
+        }
+
+        Ok(bytes_sent as usize)
+    }
+
+    pub fn recieve(&self, buffer: &mut [u8]) -> Result<usize, String> {
+        if self.state != SocketState::Connected {
+            return Err("Socket not connected".into());
+        }
+
+        let bytes_received = unsafe {
+            recv(self.fd, buffer.as_mut_ptr(), buffer.len(), 0)
+        };
+
+        if bytes_received < 0 {
+            return Err("Receive failed".into());
+        }
+        Ok(bytes_received as usize)
+    }
 }
 
 impl Drop for Socket {
