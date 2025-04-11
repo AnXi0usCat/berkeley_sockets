@@ -230,8 +230,6 @@ impl Drop for Socket {
 mod tests {
     use std::thread;
 
-    use libc::thread_info;
-
     use super::*;
 
     fn create_server(host: &str, port: u16) -> Socket {
@@ -298,6 +296,31 @@ mod tests {
             close(sock_1.fd);
             close(sock_2.fd);
         }
+    }
+
+    #[test]
+    fn test_can_connect() {
+        thread::scope(|sc| {
+            let server = create_server("127.0.0.1", 8001);
+
+            sc.spawn(|| {
+                let mut client_sock = Socket::new().expect("Failed to create socket");
+                let res = client_sock.connect("127.0.0.1", 8001);
+                assert_eq!(Ok(()), res);
+            });
+
+            let _ = server.accept().expect("Failed to accept");
+        });
+    }
+
+
+    #[test]
+    fn test_can_listen() {
+        let mut server_sock = Socket::new().expect("Failed to create socket.");
+        server_sock.bind("127.0.0.1", 8002).expect("Failed to bind to address.");
+        let res = server_sock.listen(1);
+        
+        assert_eq!(Ok(()), res);
     }
 
     #[test]
