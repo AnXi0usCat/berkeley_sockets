@@ -190,9 +190,7 @@ impl Socket {
             return Err("Socket not connected".into());
         }
 
-        let bytes_sent = unsafe {
-            send(self.fd, data.as_ptr(), data.len(), 0)
-        };
+        let bytes_sent = unsafe { send(self.fd, data.as_ptr(), data.len(), 0) };
 
         if bytes_sent < 0 {
             return Err("Failed to send data".into());
@@ -206,9 +204,7 @@ impl Socket {
             return Err("Socket not connected".into());
         }
 
-        let bytes_received = unsafe {
-            recv(self.fd, buffer.as_mut_ptr(), buffer.len(), 0)
-        };
+        let bytes_received = unsafe { recv(self.fd, buffer.as_mut_ptr(), buffer.len(), 0) };
 
         if bytes_received < 0 {
             return Err("Receive failed".into());
@@ -220,7 +216,9 @@ impl Socket {
 impl Drop for Socket {
     fn drop(&mut self) {
         if self.state != SocketState::Closed {
-            unsafe { close(self.fd); }
+            unsafe {
+                close(self.fd);
+            }
             self.state = SocketState::Closed;
         }
     }
@@ -234,8 +232,12 @@ mod tests {
 
     fn create_server(host: &str, port: u16) -> Socket {
         let mut server_sock = Socket::new().expect("Failed to create socket.");
-        server_sock.bind(host, port).expect("Failed to bind to address.");
-        server_sock.listen(5).expect("Failed to listen to connections.");
+        server_sock
+            .bind(host, port)
+            .expect("Failed to bind to address.");
+        server_sock
+            .listen(5)
+            .expect("Failed to listen to connections.");
 
         println!("Listening at {}:{}", host, port);
         server_sock
@@ -313,13 +315,14 @@ mod tests {
         });
     }
 
-
     #[test]
     fn test_can_listen() {
         let mut server_sock = Socket::new().expect("Failed to create socket.");
-        server_sock.bind("127.0.0.1", 8002).expect("Failed to bind to address.");
+        server_sock
+            .bind("127.0.0.1", 8002)
+            .expect("Failed to bind to address.");
         let res = server_sock.listen(1);
-        
+
         assert_eq!(Ok(()), res);
     }
 
