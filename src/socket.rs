@@ -1,6 +1,5 @@
 use libc::{
-    in_addr, sockaddr, sockaddr_in, socklen_t, AF_INET, EAGAIN, EWOULDBLOCK, F_GETFL, F_SETFL,
-    O_NONBLOCK, SOCK_STREAM,
+    in_addr, sockaddr, sockaddr_in, socklen_t, AF_INET, EAGAIN, EWOULDBLOCK, F_GETFL, F_SETFL, O_NONBLOCK, SOCK_STREAM
 };
 use std::{mem, net::Ipv4Addr, os::unix::io::RawFd};
 
@@ -249,6 +248,28 @@ impl Socket {
         }
 
         Ok(bytes_received as usize)
+    }
+
+    pub fn recieve_nonblocking(&self, buffer: &mut [u8]) -> Result<Option<usize>, String> {
+        if self.state != SocketState::Connected {
+            return Err("Socket not connected".into());
+        }
+
+        let bytes_received = unsafe { recv(self.fd, buffer.as_mut_ptr(), buffer.len(), 0) };
+
+        if bytes_received < 0 {
+            let err = unsafe { *__error() };
+            if err == EAGAIN || err == EWOULDBLOCK {
+                // no data was sent yet
+                return Ok(None);
+            } else {
+                return Err("Failed to receive data".into());
+            }
+        } else if bytes_received == 0 {
+            return Err("Connection close by peer".into());
+        }
+
+        Ok(Some(bytes_received as usize))
     }
 
     pub fn set_nonblocking(&self, nonblocking: bool) -> Result<(), String> {
