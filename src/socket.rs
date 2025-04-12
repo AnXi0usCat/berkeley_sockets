@@ -1,5 +1,6 @@
 use libc::{
-    in_addr, sockaddr, sockaddr_in, socklen_t, AF_INET, F_GETFL, F_SETFL, O_NONBLOCK, SOCK_STREAM,
+    in_addr, sockaddr, sockaddr_in, socklen_t, AF_INET, EAGAIN, EWOULDBLOCK, F_GETFL, F_SETFL,
+    O_NONBLOCK, SOCK_STREAM,
 };
 use std::{mem, net::Ipv4Addr, os::unix::io::RawFd};
 
@@ -67,6 +68,10 @@ unsafe extern "C" {
     // closes the socket
     // fd: raw file descriptor
     fn close(fd: i32) -> i32;
+
+    // access to the thread local errno variable which
+    // should have the latest error code set to it
+    fn __error() -> *mut libc::c_int;
 }
 
 #[derive(Debug, PartialEq)]
@@ -160,6 +165,29 @@ impl Socket {
             fd: client_fd,
             state: SocketState::Connected,
         })
+    }
+
+    pub fn accept_nonblocking(&self) -> Result<Option<Socket>, String> {
+        if self.state != SocketState::Listening {
+            return Err("Socket is not listening".into());
+        }
+
+        let client_fd = unsafe { accept(self.fd, std::ptr::null_mut(), std::ptr::null_mut()) };
+
+        if client_fd < 0 {
+            let err = unsafe { *__error() };
+            if err == EAGAIN || err == EWOULDBLOCK {
+                // connecction not yet available, will block
+                return Ok(None);
+            } else {
+                return Err("Failed to accept connection".into());
+            }
+        }
+
+        Ok(Some(Socket {
+            fd: client_fd,
+            state: SocketState::Connected,
+        }))
     }
 
     pub fn connect(&mut self, ip: &str, port: u16) -> Result<(), String> {
@@ -261,7 +289,7 @@ impl Drop for Socket {
 
 #[cfg(test)]
 mod tests {
-    use std::thread;
+    use std::{thread, time::Duration};
 
     use super::*;
 
@@ -392,5 +420,42 @@ mod tests {
         let sock = Socket::new().expect("Failed to create socket.");
         let res = sock.set_nonblocking(false);
         assert_eq!(res, Ok(()));
+    }
+
+    #[test]
+    fn test_accept_nonblocking_no_connections() {
+        let mut sock = Socket::new().expect("Failed to create socket.");
+        sock.bind("127.0.0.1", 8003)
+            .expect("failed to bind to address");
+        sock.set_nonblocking(true)
+            .expect("Faild to set non blocking");
+        sock.listen(5).expect("Failed to listen");
+        let res = sock.accept_nonblocking().unwrap();
+
+        assert_eq!(res.is_none(), true);
+    }
+
+    #[test]
+    fn test_accept_nonblocking_get_connection() {
+        let mut sock = Socket::new().expect("Failed to create socket.");
+        sock.bind("127.0.0.1", 8004)
+            .expect("failed to bind to address");
+        sock.set_nonblocking(true)
+            .expect("Faild to set non blocking");
+        sock.listen(5).expect("Failed to listen");
+
+        thread::spawn(|| {
+            let client = create_client("127.0.0.1", 8004);
+            drop(client);
+        });
+        loop {
+            if let Ok(value) = sock.accept_nonblocking() {
+                if value.is_some() {
+                    break;
+                };
+            } else {
+                thread::sleep(Duration::from_micros(100));
+            }
+        }
     }
 }
