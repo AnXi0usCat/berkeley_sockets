@@ -1,4 +1,4 @@
-use libc::{in_addr, sockaddr, sockaddr_in, socklen_t, AF_INET, SOCK_STREAM};
+use libc::{in_addr, sockaddr, sockaddr_in, socklen_t, AF_INET, F_GETFL, F_SETFL, O_NONBLOCK, SOCK_STREAM};
 use std::{mem, net::Ipv4Addr, os::unix::io::RawFd};
 
 unsafe extern "C" {
@@ -53,7 +53,15 @@ unsafe extern "C" {
     //- 0: Connection closed gracefully by peer.
     //- -1: Error occurred (check errno).
     fn recv(sockfd: i32, buf: *mut u8, len: usize, flags: i32) -> isize;
-
+    
+    // performs operations on the file descriptor
+    // sokcfd: a raw file descriptor for the socket
+    // op: to perform on a file descriptor
+    // flags: optional arguments that correspond to the operation
+    // in our case we want to set a nonblocking flag on the
+    // socket file descriptor
+    fn fcntl(sockfd: i32, op: i32, flags: i32) -> i32;
+    
     // closes the socket
     // fd: raw file descriptor
     fn close(fd: i32) -> i32;
@@ -209,7 +217,36 @@ impl Socket {
         if bytes_received < 0 {
             return Err("Receive failed".into());
         }
+
         Ok(bytes_received as usize)
+    }
+
+    pub fn set_nonblocking(&self, nonblocking: bool) -> Result<(), String> {
+        // get the current flags
+        let flags = unsafe {
+            fcntl(self.fd, F_GETFL, 0)
+        };
+
+        if flags < 0 {
+            return Err("Could not get the fule descriptor flags".into());
+        }
+
+        let new_flags = if nonblocking {
+            flags | O_NONBLOCK
+        } else {
+            flags & !O_NONBLOCK
+        };
+
+        // set the new flags
+        let res = unsafe {
+            fcntl(self.fd, F_SETFL, new_flags)
+        };
+
+        if res < 0 {
+            return Err("Failed to set the socket in non blocking mode".into());
+        }
+
+        Ok(())
     }
 }
 
@@ -343,5 +380,19 @@ mod tests {
             let recevied = client_sock.recieve(&mut buf).expect("Receive failed");
             assert_eq!(String::from_utf8_lossy(&buf[..recevied]), "Hello Server");
         });
+    }
+
+    #[test]
+    fn test_set_non_blocking_true() {
+        let sock = Socket::new().expect("Failed to create socket.");
+        let res = sock.set_nonblocking(true);
+        assert_eq!(res, Ok(()));
+    }
+    
+    #[test]
+    fn test_set_non_blocking_false() {
+        let sock = Socket::new().expect("Failed to create socket.");
+        let res = sock.set_nonblocking(false);
+        assert_eq!(res, Ok(()));
     }
 }
