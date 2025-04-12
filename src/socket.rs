@@ -1,4 +1,6 @@
-use libc::{in_addr, sockaddr, sockaddr_in, socklen_t, AF_INET, F_GETFL, F_SETFL, O_NONBLOCK, SOCK_STREAM};
+use libc::{
+    in_addr, sockaddr, sockaddr_in, socklen_t, AF_INET, F_GETFL, F_SETFL, O_NONBLOCK, SOCK_STREAM,
+};
 use std::{mem, net::Ipv4Addr, os::unix::io::RawFd};
 
 unsafe extern "C" {
@@ -53,7 +55,7 @@ unsafe extern "C" {
     //- 0: Connection closed gracefully by peer.
     //- -1: Error occurred (check errno).
     fn recv(sockfd: i32, buf: *mut u8, len: usize, flags: i32) -> isize;
-    
+
     // performs operations on the file descriptor
     // sokcfd: a raw file descriptor for the socket
     // op: to perform on a file descriptor
@@ -61,7 +63,7 @@ unsafe extern "C" {
     // in our case we want to set a nonblocking flag on the
     // socket file descriptor
     fn fcntl(sockfd: i32, op: i32, flags: i32) -> i32;
-    
+
     // closes the socket
     // fd: raw file descriptor
     fn close(fd: i32) -> i32;
@@ -223,9 +225,7 @@ impl Socket {
 
     pub fn set_nonblocking(&self, nonblocking: bool) -> Result<(), String> {
         // get the current flags
-        let flags = unsafe {
-            fcntl(self.fd, F_GETFL, 0)
-        };
+        let flags = unsafe { fcntl(self.fd, F_GETFL, 0) };
 
         if flags < 0 {
             return Err("Could not get the fule descriptor flags".into());
@@ -238,9 +238,7 @@ impl Socket {
         };
 
         // set the new flags
-        let res = unsafe {
-            fcntl(self.fd, F_SETFL, new_flags)
-        };
+        let res = unsafe { fcntl(self.fd, F_SETFL, new_flags) };
 
         if res < 0 {
             return Err("Failed to set the socket in non blocking mode".into());
@@ -388,7 +386,7 @@ mod tests {
         let res = sock.set_nonblocking(true);
         assert_eq!(res, Ok(()));
     }
-    
+
     #[test]
     fn test_set_non_blocking_false() {
         let sock = Socket::new().expect("Failed to create socket.");
