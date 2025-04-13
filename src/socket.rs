@@ -1,5 +1,6 @@
 use libc::{
-    in_addr, sockaddr, sockaddr_in, socklen_t, AF_INET, EAGAIN, EWOULDBLOCK, F_GETFL, F_SETFL, O_NONBLOCK, SOCK_STREAM
+    in_addr, sockaddr, sockaddr_in, socklen_t, AF_INET, EAGAIN, EWOULDBLOCK, F_GETFL, F_SETFL,
+    O_NONBLOCK, SOCK_STREAM,
 };
 use std::{mem, net::Ipv4Addr, os::unix::io::RawFd};
 
@@ -304,11 +305,15 @@ impl Socket {
     pub fn get_assigned_port(&self) -> Result<usize, String> {
         // return the value of type represented with an all 0 byte pattern
         let mut addr: sockaddr_in = unsafe { mem::zeroed() };
-        // ge tthe size of the struct and cast it to a corresponding libc type 
+        // ge tthe size of the struct and cast it to a corresponding libc type
         let mut len = mem::size_of::<sockaddr_in>() as socklen_t;
 
         let res = unsafe {
-            getsockname(self.fd, &mut addr as *mut sockaddr_in as *mut sockaddr, &mut len as *mut socklen_t)
+            getsockname(
+                self.fd,
+                &mut addr as *mut sockaddr_in as *mut sockaddr,
+                &mut len as *mut socklen_t,
+            )
         };
 
         if res < 0 {
@@ -336,9 +341,7 @@ mod tests {
 
     use super::*;
 
-    fn get_ssigned_port() {
-
-    }
+    fn get_ssigned_port() {}
 
     fn create_server(host: &str, port: u16) -> Socket {
         let mut server_sock = Socket::new().expect("Failed to create socket.");
@@ -444,7 +447,7 @@ mod tests {
         thread::scope(|sc| {
             let server = create_server("127.0.0.1", 0);
             let port = server.get_assigned_port().expect("Failed to get port");
-            
+
             sc.spawn(move || {
                 let client = create_client("127.0.0.1", port as u16);
                 let message = b"Hello Server";
@@ -494,7 +497,7 @@ mod tests {
         sock.set_nonblocking(true)
             .expect("Faild to set non blocking");
         sock.listen(5).expect("Failed to listen");
-        
+
         let port = sock.get_assigned_port().expect("Failed to get port");
 
         thread::spawn(move || {
