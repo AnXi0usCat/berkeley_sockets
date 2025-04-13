@@ -71,6 +71,11 @@ unsafe extern "C" {
     // access to the thread local errno variable which
     // should have the latest error code set to it
     fn __error() -> *mut libc::c_int;
+
+    // get the socket address to which the exisitng socket is bound
+    // addr: A pointer to a client socket address structure
+    // addrlen The size (in bytes) of the client socket address structure pointed to by addr
+    fn getsockname(sockfd: i32, addr: *mut sockaddr, addrlen: *mut socklen_t) -> i32;
 }
 
 #[derive(Debug, PartialEq)]
@@ -295,6 +300,23 @@ impl Socket {
 
         Ok(())
     }
+
+    pub fn get_assigned_port(&self) -> Result<usize, String> {
+        // return the value of type represented with an all 0 byte pattern
+        let mut addr: sockaddr_in = unsafe { mem::zeroed() };
+        // ge tthe size of the struct and cast it to a corresponding libc type 
+        let mut len = mem::size_of::<sockaddr_in>() as socklen_t;
+
+        let res = unsafe {
+            getsockname(self.fd, &mut addr as *mut sockaddr_in as *mut sockaddr, &mut len as *mut socklen_t)
+        };
+
+        if res < 0 {
+            return Err("Failed to get the socket address.".into());
+        }
+
+        Ok(u16::from_be(addr.sin_port) as usize)
+    }
 }
 
 impl Drop for Socket {
@@ -313,6 +335,10 @@ mod tests {
     use std::{thread, time::Duration};
 
     use super::*;
+
+    fn get_ssigned_port() {
+
+    }
 
     fn create_server(host: &str, port: u16) -> Socket {
         let mut server_sock = Socket::new().expect("Failed to create socket.");
@@ -387,25 +413,28 @@ mod tests {
     #[test]
     fn test_can_connect() {
         thread::scope(|sc| {
-            let server = create_server("127.0.0.1", 8001);
+            let server = create_server("127.0.0.1", 0);
+            let port = server.get_assigned_port().expect("failed to get port");
 
-            sc.spawn(|| {
-                let mut client_sock = Socket::new().expect("Failed to create socket");
-                let res = client_sock.connect("127.0.0.1", 8001);
+            sc.spawn(move || {
+                let mut client = Socket::new().expect("Failed to create socket");
+                let res = client.connect("127.0.0.1", port as u16);
                 assert_eq!(Ok(()), res);
+                drop(client);
             });
 
-            let _ = server.accept().expect("Failed to accept");
+            let sock = server.accept().expect("Failed to accept");
+            drop(server);
+            drop(sock);
         });
     }
 
     #[test]
     fn test_can_listen() {
-        let mut server_sock = Socket::new().expect("Failed to create socket.");
-        server_sock
-            .bind("127.0.0.1", 8002)
+        let mut sock = Socket::new().expect("Failed to create socket.");
+        sock.bind("127.0.0.1", 0)
             .expect("Failed to bind to address.");
-        let res = server_sock.listen(1);
+        let res = sock.listen(1);
 
         assert_eq!(Ok(()), res);
     }
@@ -413,10 +442,11 @@ mod tests {
     #[test]
     fn test_send_receive() {
         thread::scope(|sc| {
-            let server = create_server("127.0.0.1", 8000);
-
-            sc.spawn(|| {
-                let client = create_client("127.0.0.1", 8000);
+            let server = create_server("127.0.0.1", 0);
+            let port = server.get_assigned_port().expect("Failed to get port");
+            
+            sc.spawn(move || {
+                let client = create_client("127.0.0.1", port as u16);
                 let message = b"Hello Server";
                 client.send(message).expect("Send failed");
             });
@@ -446,7 +476,7 @@ mod tests {
     #[test]
     fn test_accept_nonblocking_no_connections() {
         let mut sock = Socket::new().expect("Failed to create socket.");
-        sock.bind("127.0.0.1", 8003)
+        sock.bind("127.0.0.1", 0)
             .expect("failed to bind to address");
         sock.set_nonblocking(true)
             .expect("Faild to set non blocking");
@@ -459,14 +489,16 @@ mod tests {
     #[test]
     fn test_accept_nonblocking_get_connection() {
         let mut sock = Socket::new().expect("Failed to create socket.");
-        sock.bind("127.0.0.1", 8004)
+        sock.bind("127.0.0.1", 0)
             .expect("failed to bind to address");
         sock.set_nonblocking(true)
             .expect("Faild to set non blocking");
         sock.listen(5).expect("Failed to listen");
+        
+        let port = sock.get_assigned_port().expect("Failed to get port");
 
-        thread::spawn(|| {
-            let client = create_client("127.0.0.1", 8004);
+        thread::spawn(move || {
+            let client = create_client("127.0.0.1", port as u16);
             drop(client);
         });
         loop {
@@ -478,5 +510,14 @@ mod tests {
                 thread::sleep(Duration::from_micros(100));
             }
         }
+    }
+
+    #[test]
+    fn test_can_get_socket_port() {
+        let mut sock = Socket::new().expect("Failed to create socket.");
+        sock.bind("127.0.0.1", 8098)
+            .expect("failed to bind to address");
+
+        assert_eq!(sock.get_assigned_port().unwrap(), 8098);
     }
 }
