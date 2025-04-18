@@ -36,7 +36,7 @@ unsafe extern "C" {
     //     void	 *udata;           /* opaque user data identifier */
     // };
     fn kevent(
-        fdesc: RawFd,
+        kq: RawFd,
         changelist: *const kevent_struct,
         nchanges: i32,
         eventlist: *mut kevent_struct,
