@@ -1,6 +1,6 @@
 use std::os::unix::io::RawFd;
 
-use libc::{kevent as kevent_struct, timespec};
+use libc::{kevent as kevent_struct, kqueue, timespec};
 
 unsafe extern "C" {
     // system call	creates	a new kernel event queue and returns a
@@ -32,7 +32,14 @@ unsafe extern "C" {
     //     intptr_t	 data;	       /* filter data value */
     //     void	 *udata;           /* opaque user data identifier */
     // };
-    fn kevent(fdesc: RawFd, changelist: *const kevent_struct, nchanges: i32, eventlist: *mut kevent_struct, nevents: i32, timeout: *const timespec) -> i32;
+    fn kevent(
+        fdesc: RawFd,
+        changelist: *const kevent_struct,
+        nchanges: i32,
+        eventlist: *mut kevent_struct,
+        nevents: i32,
+        timeout: *const timespec,
+    ) -> i32;
 
     // closes the file descriptor
     // fd: raw file descriptor
@@ -41,6 +48,36 @@ unsafe extern "C" {
     // access to the thread local errno variable which
     // should have the latest error code set to it
     fn __error() -> *mut libc::c_int;
-
 }
 
+#[derive(Debug)]
+struct Kqueue {
+    kq: RawFd,
+}
+
+impl Kqueue {
+    pub fn new() -> Result<Kqueue, String> {
+        let fd = unsafe { kqueue() };
+
+        if fd < 0 {
+            return Err(format!(
+                "Failed to create kqueue() file descriptor: {}",
+                Kqueue::errno()
+            ));
+        }
+
+        Ok(Kqueue { kq: fd })
+    }
+
+    fn errno() -> i32 {
+        unsafe { *__error() }
+    }
+}
+
+impl Drop for Kqueue {
+    fn drop(&mut self) {
+        unsafe {
+            close(self.kq);
+        }
+    }
+}
