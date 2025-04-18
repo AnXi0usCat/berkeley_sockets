@@ -1,6 +1,6 @@
 use std::os::unix::io::RawFd;
 
-use libc::{kevent as kevent_struct, kqueue, timespec};
+use libc::{kevent as kevent_struct, timespec};
 
 unsafe extern "C" {
     // system call	creates	a new kernel event queue and returns a
