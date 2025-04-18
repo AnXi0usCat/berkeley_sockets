@@ -1,6 +1,5 @@
 use libc::{
-    in_addr, sockaddr, sockaddr_in, socklen_t, AF_INET, EAGAIN, EWOULDBLOCK, F_GETFL, F_SETFL,
-    O_NONBLOCK, SOCK_STREAM,
+    __error, in_addr, sockaddr, sockaddr_in, socklen_t, AF_INET, EAGAIN, EWOULDBLOCK, F_GETFL, F_SETFL, O_NONBLOCK, SOCK_STREAM
 };
 use std::{mem, net::Ipv4Addr, os::unix::io::RawFd};
 
@@ -242,6 +241,25 @@ impl Socket {
         Ok(bytes_sent as usize)
     }
 
+    pub fn send_nonblocking(&self, data: &[u8]) -> Result<Option<usize>, String> {
+        if self.state != SocketState::Connected {
+            return Err("Socket not connected".into());
+        }
+
+        let bytes_sent = unsafe { send(self.fd, data.as_ptr(), data.len(), 0) };
+
+        if bytes_sent < 0 {
+            let err = unsafe { *__error() };
+            if err == EAGAIN || err == EWOULDBLOCK {
+                return Ok(None);
+            } else {
+                return Err("Failed to send data to the socket".into());
+            }
+        }
+
+        Ok(Some(bytes_sent as usize))
+    }
+
     pub fn recieve(&self, buffer: &mut [u8]) -> Result<usize, String> {
         if self.state != SocketState::Connected {
             return Err("Socket not connected".into());
@@ -266,7 +284,7 @@ impl Socket {
         if bytes_received < 0 {
             let err = unsafe { *__error() };
             if err == EAGAIN || err == EWOULDBLOCK {
-                // no data was sent yet
+                // no data is avaialble for us to recieve yet
                 return Ok(None);
             } else {
                 return Err("Failed to receive data".into());
