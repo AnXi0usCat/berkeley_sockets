@@ -1,4 +1,4 @@
-use std::os::unix::io::RawFd;
+use std::{os::unix::io::RawFd, usize};
 
 use libc::{
     c_void, kevent as kevent_struct, timespec, uintptr_t, EVFILT_READ, EVFILT_WRITE, EV_ADD,
@@ -157,6 +157,34 @@ impl Kqueue {
         }
 
         Ok(())
+    }
+
+    pub fn wait(
+        &self,
+        events: &mut [kevent_struct],
+        timeout: Option<timespec>,
+    ) -> Result<usize, String> {
+        let p_timeout = match timeout {
+            Some(ts) => &ts as *const timespec,
+            None => std::ptr::null() as *const timespec,
+        };
+
+        let n = unsafe {
+            kevent(
+                self.kq,
+                std::ptr::null(),
+                0,
+                events.as_mut_ptr(),
+                events.len() as i32,
+                p_timeout,
+            )
+        };
+
+        if n < 0 {
+            return Err(format!("Failed to WAIT on kevent(): {}", Kqueue::errno()));
+        }
+
+        Ok(n as usize)
     }
 
     fn errno() -> i32 {
