@@ -181,7 +181,10 @@ impl Kqueue {
         };
 
         if n < 0 {
-            return Err(format!("Failed to WAIT on kevent(): {}", Kqueue::errno()));
+            return Err(format!(
+                "Failed to WAIT on events in kevent(): {}",
+                Kqueue::errno()
+            ));
         }
 
         Ok(n as usize)
