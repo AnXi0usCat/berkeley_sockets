@@ -39,7 +39,7 @@ unsafe extern "C" {
         kq: RawFd,
         changelist: *const kevent_struct,
         nchanges: i32,
-        eventlist: *mut kevent_struct,
+        eventlist: *const kevent_struct,
         nevents: i32,
         timeout: *const timespec,
     ) -> i32;
@@ -109,7 +109,7 @@ impl Kqueue {
                 self.kq,
                 &event as *const kevent_struct,
                 1,
-                std::ptr::null_mut(),
+                std::ptr::null(),
                 0,
                 std::ptr::null() as *const timespec,
             )
@@ -143,7 +143,7 @@ impl Kqueue {
                 self.kq,
                 &event as *const kevent_struct,
                 1,
-                std::ptr::null_mut(),
+                std::ptr::null(),
                 0,
                 std::ptr::null() as *const timespec,
             )
@@ -161,7 +161,7 @@ impl Kqueue {
 
     pub fn wait(
         &self,
-        events: &mut [kevent_struct],
+        events: &[kevent_struct],
         timeout: Option<timespec>,
     ) -> Result<usize, String> {
         let p_timeout = match timeout {
@@ -174,7 +174,7 @@ impl Kqueue {
                 self.kq,
                 std::ptr::null(),
                 0,
-                events.as_mut_ptr(),
+                events.as_ptr(),
                 events.len() as i32,
                 p_timeout,
             )
