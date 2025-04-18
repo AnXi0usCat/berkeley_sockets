@@ -1,6 +1,9 @@
 use std::os::unix::io::RawFd;
 
-use libc::{kevent as kevent_struct, timespec};
+use libc::{
+    c_void, kevent as kevent_struct, timespec, uintptr_t, EVFILT_READ, EVFILT_WRITE, EV_ADD, EV_CLEAR,
+    EV_ONESHOT,
+};
 
 unsafe extern "C" {
     // system call	creates	a new kernel event queue and returns a
@@ -67,6 +70,59 @@ impl Kqueue {
         }
 
         Ok(Kqueue { kq: fd })
+    }
+
+    pub fn add(&self, fd: RawFd, readable: bool, oneshot: bool) -> Result<(), String> {
+        // readable == true -> EVFILT_READ, readble == false -> EVFILT_WRITE
+        let filter = if readable { EVFILT_READ } else { EVFILT_WRITE };
+
+        // EV_ADD = 0x0001 (register this event)
+        // EV_CLEAR = 0x0020 (edge‑triggered: after you get an event, you must drain it to avoid missing future ones)
+        // EV_ONESHOT= 0x0010 (automatically delete this event after it fires once)
+        //
+        // when oneshot == false:
+        //
+        // flags = 0x0001 /*EV_ADD*/
+        //       | 0x0020 /*EV_CLEAR*/
+        //       | 0x0000
+        //       = 0x0021
+        //
+        // when oneshot == true:
+        //
+        // flags = 0x0001 /*EV_ADD*/
+        //       | 0x0020 /*EV_CLEAR*/
+        //       | 0x0010 /*EV_ONESHOT*/
+        //       = 0x0031
+        let flags = EV_ADD | EV_CLEAR | if oneshot { EV_ONESHOT } else { 0 };
+
+        let event = kevent_struct {
+            ident: fd as uintptr_t,
+            filter,
+            flags,
+            fflags: 0,
+            data: 0,
+            udata: std::ptr::null_mut() as *mut c_void,
+        };
+
+        let res = unsafe {
+            kevent(
+                self.kq,
+                &event as *const kevent_struct,
+                1,
+                std::ptr::null_mut(),
+                0,
+                std::ptr::null() as *const timespec,
+            )
+        };
+
+        if res < 0 {
+            return Err(format!(
+                "Failed to add event to kevent(): {}",
+                Kqueue::errno()
+            ));
+        }
+
+        Ok(())
     }
 
     fn errno() -> i32 {
