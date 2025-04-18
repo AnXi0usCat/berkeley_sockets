@@ -1,8 +1,8 @@
 use std::os::unix::io::RawFd;
 
 use libc::{
-    c_void, kevent as kevent_struct, timespec, uintptr_t, EVFILT_READ, EVFILT_WRITE, EV_ADD, EV_CLEAR,
-    EV_ONESHOT,
+    c_void, kevent as kevent_struct, timespec, uintptr_t, EVFILT_READ, EVFILT_WRITE, EV_ADD,
+    EV_CLEAR, EV_DELETE, EV_ONESHOT,
 };
 
 unsafe extern "C" {
@@ -117,7 +117,41 @@ impl Kqueue {
 
         if res < 0 {
             return Err(format!(
-                "Failed to add event to kevent(): {}",
+                "Failed to ADD event to kevent(): {}",
+                Kqueue::errno()
+            ));
+        }
+
+        Ok(())
+    }
+
+    pub fn delete(&self, fd: RawFd, readable: bool) -> Result<(), String> {
+        // readable == true -> EVFILT_READ, readble == false -> EVFILT_WRITE
+        let filter = if readable { EVFILT_READ } else { EVFILT_WRITE };
+
+        let event = kevent_struct {
+            ident: fd as uintptr_t,
+            filter,
+            flags: EV_DELETE,
+            fflags: 0,
+            data: 0,
+            udata: std::ptr::null_mut() as *mut c_void,
+        };
+
+        let res = unsafe {
+            kevent(
+                self.kq,
+                &event as *const kevent_struct,
+                1,
+                std::ptr::null_mut(),
+                0,
+                std::ptr::null() as *const timespec,
+            )
+        };
+
+        if res < 0 {
+            return Err(format!(
+                "Failed to DELETE event from kevent(): {}",
                 Kqueue::errno()
             ));
         }
