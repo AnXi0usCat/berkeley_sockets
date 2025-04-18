@@ -1,2 +1,2 @@
-mod socket;
 mod kqueue;
+mod socket;

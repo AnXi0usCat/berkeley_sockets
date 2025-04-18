@@ -1,5 +1,6 @@
 use libc::{
-    in_addr, sockaddr, sockaddr_in, socklen_t, AF_INET, EAGAIN, EWOULDBLOCK, F_GETFL, F_SETFL, O_NONBLOCK, SOCK_STREAM
+    in_addr, sockaddr, sockaddr_in, socklen_t, AF_INET, EAGAIN, EWOULDBLOCK, F_GETFL, F_SETFL,
+    O_NONBLOCK, SOCK_STREAM,
 };
 use std::{mem, net::Ipv4Addr, os::unix::io::RawFd};
 
