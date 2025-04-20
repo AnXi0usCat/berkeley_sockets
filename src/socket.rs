@@ -89,8 +89,8 @@ pub enum SocketState {
 }
 
 pub struct Socket {
-    fd: RawFd,
-    state: SocketState,
+    pub fd: RawFd,
+    pub state: SocketState,
 }
 
 impl Socket {
