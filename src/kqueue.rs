@@ -53,7 +53,7 @@ unsafe extern "C" {
     fn __error() -> *mut libc::c_int;
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 struct Kqueue {
     kq: RawFd,
 }
@@ -200,5 +200,151 @@ impl Drop for Kqueue {
         unsafe {
             close(self.kq);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Kqueue;
+    use libc::{kevent, pipe, read, timespec, write};
+    use std::{mem, os::fd::RawFd};
+
+    #[test]
+    fn test_can_create_kq() {
+        let kq = Kqueue::new().expect("failed");
+        assert_eq!(kq, Kqueue { kq: kq.kq });
+    }
+
+    #[test]
+    fn test_can_register_fd() {
+        // GIVEN
+        let mut fds = [0; 2];
+        let res = unsafe { pipe(fds.as_mut_ptr()) };
+        assert_eq!(res, 0);
+
+        let read_fd = fds[0];
+        let write_fd = fds[1];
+
+        // WHEN
+        let kq = Kqueue::new().expect("failed");
+        kq.add(read_fd, true, false).expect("failed to add");
+
+        // write something to the wrtie end of the pipe
+        const MESSAGE: &[u8] = b"hello";
+        let written = unsafe {
+            write(
+                write_fd,
+                MESSAGE.as_ptr() as *const libc::c_void,
+                MESSAGE.len(),
+            )
+        };
+        assert_eq!(written as usize, MESSAGE.len());
+
+        // THEN
+        let events = [unsafe { mem::zeroed() }; 1];
+        let n = kq.wait(&events, None).unwrap();
+        assert_eq!(n, 1);
+    }
+
+    #[test]
+    fn test_can_wait_on_data() {
+        // GIVEN
+        let mut fds = [0; 2];
+        let res = unsafe { pipe(fds.as_mut_ptr()) };
+        assert_eq!(res, 0);
+
+        let read_fd = fds[0];
+        let write_fd = fds[1];
+
+        // WHEN
+        let kq = Kqueue::new().expect("failed");
+        kq.add(read_fd, true, false).expect("failed to add");
+
+        // write something to the wrtie end of the pipe
+        const MESSAGE: &[u8] = b"hello";
+        let written = unsafe {
+            write(
+                write_fd,
+                MESSAGE.as_ptr() as *const libc::c_void,
+                MESSAGE.len(),
+            )
+        };
+        assert_eq!(written as usize, MESSAGE.len());
+
+        let events = [unsafe { mem::zeroed() }; 1];
+        let n = kq.wait(&events, None).unwrap();
+        assert_eq!(n, 1);
+
+        let mut buf = [0u8; MESSAGE.len()];
+        let n = unsafe {
+            read(
+                read_fd,
+                buf.as_mut_ptr() as *mut libc::c_void,
+                MESSAGE.len(),
+            )
+        };
+        // THEN
+        assert_eq!(n as usize, MESSAGE.len());
+        assert_eq!(&buf[..n as usize], MESSAGE);
+    }
+
+    #[test]
+    fn test_wait_timeout() {
+        // GIVEN
+        let kq = Kqueue::new().expect("failed");
+        let events = [unsafe { mem::zeroed() }; 1];
+
+        // WHEN
+        let n = kq
+            .wait(
+                &events,
+                Some(timespec {
+                    tv_sec: 0,
+                    tv_nsec: 1000,
+                }),
+            )
+            .unwrap();
+        // THEN
+        assert_eq!(n, 0);
+    }
+
+    #[test]
+    fn test_can_delete_from_kqueue() {
+        // GIVEN
+        let mut fds = [0; 2];
+        let res = unsafe { pipe(fds.as_mut_ptr()) };
+        assert_eq!(res, 0);
+
+        let read_fd = fds[0];
+        let write_fd = fds[1];
+
+        // WHEN
+        let kq = Kqueue::new().expect("failed");
+        kq.add(read_fd, true, false).expect("failed to add");
+        kq.delete(read_fd, true).expect("delete failed");
+
+        // write something to the wrtie end of the pipe
+        const MESSAGE: &[u8] = b"hello";
+        let written = unsafe {
+            write(
+                write_fd,
+                MESSAGE.as_ptr() as *const libc::c_void,
+                MESSAGE.len(),
+            )
+        };
+        assert_eq!(written as usize, MESSAGE.len());
+
+        let events = [unsafe { mem::zeroed() }; 1];
+        let n = kq
+            .wait(
+                &events,
+                Some(timespec {
+                    tv_sec: 0,
+                    tv_nsec: 1000,
+                }),
+            )
+            .unwrap();
+        // THEN
+        assert_eq!(n, 0);
     }
 }
