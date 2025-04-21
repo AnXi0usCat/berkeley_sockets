@@ -244,6 +244,11 @@ mod tests {
         let events = [unsafe { mem::zeroed() }; 1];
         let n = kq.wait(&events, None).unwrap();
         assert_eq!(n, 1);
+
+        unsafe {
+            libc::close(read_fd);
+            libc::close(write_fd)
+        };
     }
 
     #[test]
@@ -286,6 +291,11 @@ mod tests {
         // THEN
         assert_eq!(n as usize, MESSAGE.len());
         assert_eq!(&buf[..n as usize], MESSAGE);
+
+        unsafe {
+            libc::close(read_fd);
+            libc::close(write_fd)
+        };
     }
 
     #[test]
@@ -346,5 +356,10 @@ mod tests {
             .unwrap();
         // THEN
         assert_eq!(n, 0);
+
+        unsafe {
+            libc::close(read_fd);
+            libc::close(write_fd)
+        };
     }
 }
