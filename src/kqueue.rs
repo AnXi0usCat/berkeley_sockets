@@ -39,7 +39,7 @@ unsafe extern "C" {
         kq: RawFd,
         changelist: *const kevent_struct,
         nchanges: i32,
-        eventlist: *const kevent_struct,
+        eventlist: *mut kevent_struct,
         nevents: i32,
         timeout: *const timespec,
     ) -> i32;
@@ -109,7 +109,7 @@ impl Kqueue {
                 self.kq,
                 &event as *const kevent_struct,
                 1,
-                std::ptr::null(),
+                std::ptr::null_mut(),
                 0,
                 std::ptr::null() as *const timespec,
             )
@@ -143,7 +143,7 @@ impl Kqueue {
                 self.kq,
                 &event as *const kevent_struct,
                 1,
-                std::ptr::null(),
+                std::ptr::null_mut(),
                 0,
                 std::ptr::null() as *const timespec,
             )
@@ -161,7 +161,7 @@ impl Kqueue {
 
     pub fn wait(
         &self,
-        events: &[kevent_struct],
+        events: &mut [kevent_struct],
         timeout: Option<timespec>,
     ) -> Result<usize, String> {
         let p_timeout = match timeout {
@@ -174,7 +174,7 @@ impl Kqueue {
                 self.kq,
                 std::ptr::null(),
                 0,
-                events.as_ptr(),
+                events.as_mut_ptr(),
                 events.len() as i32,
                 p_timeout,
             )
@@ -206,8 +206,8 @@ impl Drop for Kqueue {
 #[cfg(test)]
 mod tests {
     use super::Kqueue;
-    use libc::{kevent, pipe, read, timespec, write};
-    use std::{mem, os::fd::RawFd};
+    use libc::{pipe, read, timespec, write};
+    use std::mem;
 
     #[test]
     fn test_can_create_kq() {
@@ -222,18 +222,15 @@ mod tests {
         let res = unsafe { pipe(fds.as_mut_ptr()) };
         assert_eq!(res, 0);
 
-        let read_fd = fds[0];
-        let write_fd = fds[1];
-
         // WHEN
         let kq = Kqueue::new().expect("failed");
-        kq.add(read_fd, true, false).expect("failed to add");
+        kq.add(fds[0], true, false).expect("failed to add");
 
         // write something to the wrtie end of the pipe
         const MESSAGE: &[u8] = b"hello";
         let written = unsafe {
             write(
-                write_fd,
+                fds[1],
                 MESSAGE.as_ptr() as *const libc::c_void,
                 MESSAGE.len(),
             )
@@ -241,13 +238,13 @@ mod tests {
         assert_eq!(written as usize, MESSAGE.len());
 
         // THEN
-        let events = [unsafe { mem::zeroed() }; 1];
-        let n = kq.wait(&events, None).unwrap();
+        let mut events = [unsafe { mem::zeroed() }; 1];
+        let n = kq.wait(&mut events, None).unwrap();
         assert_eq!(n, 1);
 
         unsafe {
-            libc::close(read_fd);
-            libc::close(write_fd)
+            libc::close(fds[0]);
+            libc::close(fds[1]);
         };
     }
 
@@ -258,32 +255,29 @@ mod tests {
         let res = unsafe { pipe(fds.as_mut_ptr()) };
         assert_eq!(res, 0);
 
-        let read_fd = fds[0];
-        let write_fd = fds[1];
-
         // WHEN
         let kq = Kqueue::new().expect("failed");
-        kq.add(read_fd, true, false).expect("failed to add");
+        kq.add(fds[0], true, false).expect("failed to add");
 
         // write something to the wrtie end of the pipe
         const MESSAGE: &[u8] = b"hello";
         let written = unsafe {
             write(
-                write_fd,
+                fds[1],
                 MESSAGE.as_ptr() as *const libc::c_void,
                 MESSAGE.len(),
             )
         };
         assert_eq!(written as usize, MESSAGE.len());
 
-        let events = [unsafe { mem::zeroed() }; 1];
-        let n = kq.wait(&events, None).unwrap();
+        let mut events = [unsafe { mem::zeroed() }; 1];
+        let n = kq.wait(&mut events, None).unwrap();
         assert_eq!(n, 1);
 
         let mut buf = [0u8; MESSAGE.len()];
         let n = unsafe {
             read(
-                read_fd,
+                fds[0],
                 buf.as_mut_ptr() as *mut libc::c_void,
                 MESSAGE.len(),
             )
@@ -293,8 +287,8 @@ mod tests {
         assert_eq!(&buf[..n as usize], MESSAGE);
 
         unsafe {
-            libc::close(read_fd);
-            libc::close(write_fd)
+            libc::close(fds[0]);
+            libc::close(fds[1]);
         };
     }
 
@@ -302,12 +296,12 @@ mod tests {
     fn test_wait_timeout() {
         // GIVEN
         let kq = Kqueue::new().expect("failed");
-        let events = [unsafe { mem::zeroed() }; 1];
+        let mut events = [unsafe { mem::zeroed() }; 1];
 
         // WHEN
         let n = kq
             .wait(
-                &events,
+                &mut events,
                 Some(timespec {
                     tv_sec: 0,
                     tv_nsec: 1000,
@@ -325,29 +319,26 @@ mod tests {
         let res = unsafe { pipe(fds.as_mut_ptr()) };
         assert_eq!(res, 0);
 
-        let read_fd = fds[0];
-        let write_fd = fds[1];
-
         // WHEN
         let kq = Kqueue::new().expect("failed");
-        kq.add(read_fd, true, false).expect("failed to add");
-        kq.delete(read_fd, true).expect("delete failed");
+        kq.add(fds[0], true, false).expect("failed to add");
+        kq.delete(fds[0], true).expect("delete failed");
 
         // write something to the wrtie end of the pipe
         const MESSAGE: &[u8] = b"hello";
         let written = unsafe {
             write(
-                write_fd,
+                fds[1],
                 MESSAGE.as_ptr() as *const libc::c_void,
                 MESSAGE.len(),
             )
         };
         assert_eq!(written as usize, MESSAGE.len());
 
-        let events = [unsafe { mem::zeroed() }; 1];
+        let mut events = [unsafe { mem::zeroed() }; 1];
         let n = kq
             .wait(
-                &events,
+                &mut events,
                 Some(timespec {
                     tv_sec: 0,
                     tv_nsec: 1000,
@@ -358,8 +349,8 @@ mod tests {
         assert_eq!(n, 0);
 
         unsafe {
-            libc::close(read_fd);
-            libc::close(write_fd)
+            libc::close(fds[0]);
+            libc::close(fds[1]);
         };
     }
 }

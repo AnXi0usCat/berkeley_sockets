@@ -358,6 +358,8 @@ impl Drop for Socket {
 mod tests {
     use std::{thread, time::Duration};
 
+    use libc::{socketpair, AF_UNIX, c_int};
+
     use super::*;
 
     fn get_ssigned_port() {}
@@ -439,6 +441,7 @@ mod tests {
             let port = server.get_assigned_port().expect("failed to get port");
 
             sc.spawn(move || {
+                thread::sleep(Duration::from_millis(100));
                 let mut client = Socket::new().expect("Failed to create socket");
                 let res = client.connect("127.0.0.1", port as u16);
                 assert_eq!(Ok(()), res);
@@ -463,22 +466,33 @@ mod tests {
 
     #[test]
     fn test_send_receive() {
-        thread::scope(|sc| {
-            let server = create_server("127.0.0.1", 0);
-            let port = server.get_assigned_port().expect("Failed to get port");
+        // GIVEN
+        let mut fds = [0; 2];
+        let res = unsafe { socketpair(AF_UNIX, SOCK_STREAM, 0, &mut fds as *mut c_int) };
+        assert_eq!(res, 0);
 
-            sc.spawn(move || {
-                let client = create_client("127.0.0.1", port as u16);
-                let message = b"Hello Server";
-                client.send(message).expect("Send failed");
-            });
+        let mut server = Socket::new().expect("Failed to create socket.");
+        let mut client = Socket::new().expect("Failed to create socket.");
+        
+        server.fd = fds[0];
+        server.state = SocketState::Connected;
+        client.fd = fds[1];
+        client.state = SocketState::Connected;
 
-            let client_sock = server.accept().expect("Failed to accept");
+        // WHEN
+        let message = b"Hello Server";
+        client.send(message).expect("Send failed");
+        
+        let mut buf = [0u8; 1024];
+        
+        // THEN
+        let recevied = server.recieve(&mut buf).expect("Receive failed");
+        assert_eq!(String::from_utf8_lossy(&buf[..recevied]), "Hello Server");
 
-            let mut buf = [0u8; 1024];
-            let recevied = client_sock.recieve(&mut buf).expect("Receive failed");
-            assert_eq!(String::from_utf8_lossy(&buf[..recevied]), "Hello Server");
-        });
+        unsafe {
+            libc::close(fds[0]);
+            libc::close(fds[1]);
+        };
     }
 
     #[test]
