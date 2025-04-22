@@ -29,7 +29,7 @@ unsafe extern "C" {
     // sockfd: file descriptor for the socket
     // addr: A pointer to a client socket address structure
     // addrlen The size (in bytes) of the client socket address structure pointed to by addr
-    fn connect(sockfd: i32, addr: *const sockaddr, addrlen: *const socklen_t) -> i32;
+    fn connect(sockfd: i32, addr: *const sockaddr, addrlen: socklen_t) -> i32;
 
     // sockfd: file descriptor for the socket
     // buf: a pointer to a buffer that holds the data
@@ -216,7 +216,7 @@ impl Socket {
             connect(
                 self.fd,
                 &addr as *const sockaddr_in as *const sockaddr,
-                mem::size_of::<sockaddr_in>() as *const u32,
+                mem::size_of::<sockaddr_in>() as u32,
             )
         };
 

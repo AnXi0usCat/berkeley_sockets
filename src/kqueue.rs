@@ -163,7 +163,7 @@ impl Kqueue {
         &self,
         events: &mut [kevent_struct],
         timeout: Option<timespec>,
-    ) -> Result<usize, String> {
+    ) -> Result<isize, String> {
         let p_timeout = match timeout {
             Some(ts) => &ts as *const timespec,
             None => std::ptr::null() as *const timespec,
@@ -187,7 +187,7 @@ impl Kqueue {
             ));
         }
 
-        Ok(n as usize)
+        Ok(n as isize)
     }
 
     fn errno() -> i32 {
