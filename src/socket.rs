@@ -1,6 +1,6 @@
 use libc::{
-    in_addr, sockaddr, sockaddr_in, socklen_t, AF_INET, EAGAIN, EWOULDBLOCK, F_GETFL, F_SETFL,
-    O_NONBLOCK, SOCK_STREAM,
+    AF_INET, EAGAIN, EWOULDBLOCK, F_GETFL, F_SETFL, O_NONBLOCK, SOCK_STREAM, in_addr, sockaddr,
+    sockaddr_in, socklen_t,
 };
 use std::{mem, net::Ipv4Addr, os::unix::io::RawFd};
 
@@ -88,6 +88,7 @@ pub enum SocketState {
     Closed,
 }
 
+#[derive(Debug)]
 pub struct Socket {
     pub fd: RawFd,
     pub state: SocketState,
@@ -374,7 +375,7 @@ impl Drop for Socket {
 mod tests {
     use std::{thread, time::Duration};
 
-    use libc::{c_int, socketpair, AF_UNIX};
+    use libc::{AF_UNIX, c_int, socketpair};
 
     use super::*;
 

@@ -1,8 +1,8 @@
 use std::{os::unix::io::RawFd, usize};
 
 use libc::{
-    c_void, kevent as kevent_struct, timespec, uintptr_t, EVFILT_READ, EVFILT_WRITE, EV_ADD,
-    EV_CLEAR, EV_DELETE, EV_ONESHOT,
+    EV_ADD, EV_CLEAR, EV_DELETE, EV_ONESHOT, EVFILT_READ, EVFILT_WRITE, c_void,
+    kevent as kevent_struct, timespec, uintptr_t,
 };
 
 unsafe extern "C" {
@@ -54,7 +54,7 @@ unsafe extern "C" {
 }
 
 #[derive(Debug, PartialEq)]
-struct Kqueue {
+pub struct Kqueue {
     kq: RawFd,
 }
 
