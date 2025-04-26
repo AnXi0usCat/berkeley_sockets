@@ -235,7 +235,7 @@ mod tests {
                 MESSAGE.len(),
             )
         };
-        assert_eq!(written as usize, MESSAGE.len());
+        assert_eq!(written, MESSAGE.len() as isize);
 
         // THEN
         let mut events = [unsafe { mem::zeroed() }; 1];
@@ -275,13 +275,7 @@ mod tests {
         assert_eq!(n, 1);
 
         let mut buf = [0u8; MESSAGE.len()];
-        let n = unsafe {
-            read(
-                fds[0],
-                buf.as_mut_ptr() as *mut libc::c_void,
-                MESSAGE.len(),
-            )
-        };
+        let n = unsafe { read(fds[0], buf.as_mut_ptr() as *mut libc::c_void, MESSAGE.len()) };
         // THEN
         assert_eq!(n as usize, MESSAGE.len());
         assert_eq!(&buf[..n as usize], MESSAGE);

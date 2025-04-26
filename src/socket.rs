@@ -98,7 +98,10 @@ impl Socket {
         let fd = unsafe { socket(AF_INET, SOCK_STREAM, 0) };
 
         if fd == -1 {
-            Err("Failed to create a socket".into())
+            Err(format!(
+                "Failed to create a socket: error {}",
+                Socket::errno()
+            ))
         } else {
             Ok(Socket {
                 fd,
@@ -133,7 +136,7 @@ impl Socket {
         };
 
         if res == -1 {
-            return Err("Failed to bind socket".into());
+            return Err(format!("Failed to bind socket: error {}", Socket::errno()));
         }
 
         self.state = SocketState::Bound;
@@ -148,7 +151,10 @@ impl Socket {
         let res = unsafe { listen(self.fd, backlog) };
 
         if res == -1 {
-            return Err("Failed to listen on socket".into());
+            return Err(format!(
+                "Failed to listen on socket: error {}",
+                Socket::errno()
+            ));
         }
 
         self.state = SocketState::Listening;
@@ -163,7 +169,10 @@ impl Socket {
         let client_fd = unsafe { accept(self.fd, std::ptr::null_mut(), std::ptr::null_mut()) };
 
         if client_fd == -1 {
-            return Err("Failed to accept connection".into());
+            return Err(format!(
+                "Failed to accept connection: errno {}",
+                Socket::errno()
+            ));
         }
 
         Ok(Socket {
@@ -180,12 +189,15 @@ impl Socket {
         let client_fd = unsafe { accept(self.fd, std::ptr::null_mut(), std::ptr::null_mut()) };
 
         if client_fd < 0 {
-            let err = unsafe { *__error() };
+            let err = Socket::errno();
             if err == EAGAIN || err == EWOULDBLOCK {
                 // connecction not yet available, will block
                 return Ok(None);
             } else {
-                return Err("Failed to accept connection".into());
+                return Err(format!(
+                    "Failed to accept connection: error {}",
+                    Socket::errno()
+                ));
             }
         }
 
@@ -341,6 +353,10 @@ impl Socket {
 
         Ok(u16::from_be(addr.sin_port) as usize)
     }
+
+    fn errno() -> i32 {
+        unsafe { *__error() }
+    }
 }
 
 impl Drop for Socket {
@@ -358,7 +374,7 @@ impl Drop for Socket {
 mod tests {
     use std::{thread, time::Duration};
 
-    use libc::{socketpair, AF_UNIX, c_int};
+    use libc::{c_int, socketpair, AF_UNIX};
 
     use super::*;
 
@@ -473,7 +489,7 @@ mod tests {
 
         let mut server = Socket::new().expect("Failed to create socket.");
         let mut client = Socket::new().expect("Failed to create socket.");
-        
+
         server.fd = fds[0];
         server.state = SocketState::Connected;
         client.fd = fds[1];
@@ -482,9 +498,9 @@ mod tests {
         // WHEN
         let message = b"Hello Server";
         client.send(message).expect("Send failed");
-        
+
         let mut buf = [0u8; 1024];
-        
+
         // THEN
         let recevied = server.recieve(&mut buf).expect("Receive failed");
         assert_eq!(String::from_utf8_lossy(&buf[..recevied]), "Hello Server");
