@@ -2,7 +2,6 @@ use libc::{EVFILT_READ, EVFILT_WRITE, kevent, timespec};
 
 use crate::kqueue::Kqueue;
 use std::os::fd::RawFd;
-use std::sync::mpsc::{Receiver, Sender};
 use std::sync::{Arc, Mutex, mpsc};
 use std::thread;
 
@@ -45,8 +44,9 @@ impl Reactor {
         let listener_fd = self.listener_fd;
 
         thread::spawn(move || {
+            let mut events = [unsafe { std::mem::zeroed::<kevent>() }; 1024];
+
             loop {
-                
                 let _ = match cmd_rx.try_recv() {
                     Ok(Cmd::Add(fd, readable, oneshot)) => {
                         kq.lock().unwrap().add(fd, readable, oneshot)
@@ -54,9 +54,7 @@ impl Reactor {
                     Ok(Cmd::Delete(fd, readable)) => kq.lock().unwrap().delete(fd, readable),
                     Err(e) => Err(e).map_err(|e| format!("failed to receive from command sender {}", e)),
                 };
-
-                let mut events = [unsafe { std::mem::zeroed::<kevent>() }; 1024];
-                
+    
                 let n = kq
                     .lock()
                     .unwrap()
