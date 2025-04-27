@@ -13,14 +13,13 @@ pub struct AsyncTcpListener {
 }
 
 impl AsyncTcpListener {
-    
     pub fn bind(host: &str, port: u16) -> Result<Self, String> {
         let mut sc = Socket::new()?;
         sc.bind(host, port)?;
         sc.set_nonblocking(true)?;
         sc.listen(100)?;
 
-        let reactor = Reactor::new()?;
+        let reactor = Reactor::new(sc.fd)?;
         let (tx, rx) = reactor.start();
 
         tx.send(Cmd::Add(sc.fd, true, false))
