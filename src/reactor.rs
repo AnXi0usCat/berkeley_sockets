@@ -28,7 +28,6 @@ pub struct Reactor {
 }
 
 impl Reactor {
-
     pub fn new(fd: RawFd) -> Result<Self, String> {
         let kq = Kqueue::new()?;
         Ok(Reactor {
@@ -47,14 +46,17 @@ impl Reactor {
             let mut events = [unsafe { std::mem::zeroed::<kevent>() }; 1024];
 
             loop {
-                let _ = match cmd_rx.try_recv() {
-                    Ok(Cmd::Add(fd, readable, oneshot)) => {
-                        kq.lock().unwrap().add(fd, readable, oneshot)
+                while let Ok(cmd) = cmd_rx.try_recv() {
+                    match cmd {
+                        Cmd::Add(fd, readable, oneshot) => {
+                            kq.lock().unwrap().add(fd, readable, oneshot);
+                        }
+                        Cmd::Delete(fd, readable) => {
+                            kq.lock().unwrap().delete(fd, readable);
+                        }
                     }
-                    Ok(Cmd::Delete(fd, readable)) => kq.lock().unwrap().delete(fd, readable),
-                    Err(e) => Err(e).map_err(|e| format!("failed to receive from command sender {}", e)),
-                };
-    
+                }
+
                 let n = kq
                     .lock()
                     .unwrap()
@@ -68,7 +70,6 @@ impl Reactor {
                     .unwrap();
 
                 for e in &events[..n as usize] {
-                    
                     let fd = e.ident as RawFd;
                     let filter = e.filter;
 
