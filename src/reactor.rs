@@ -5,14 +5,14 @@ use std::os::fd::RawFd;
 use std::sync::{Arc, Mutex, mpsc};
 use std::thread;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Event {
     NewConnection(RawFd),
     Readable(RawFd),
     Writable(RawFd),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Cmd {
     Add(RawFd, bool, bool),
     Delete(RawFd, bool),
