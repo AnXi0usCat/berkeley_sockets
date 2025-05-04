@@ -1,4 +1,4 @@
-use libc::{EVFILT_READ, EVFILT_WRITE, kevent, timespec};
+use libc::{kevent, timespec};
 
 use crate::kqueue::Kqueue;
 use std::collections::HashMap;
@@ -64,7 +64,7 @@ impl Reactor {
         self.kq.lock().unwrap().add(fd, readable, oneshot)
     }
 
-    pub fn event_loop(&mut self) {
+    fn event_loop(&mut self) {
         let kq = Arc::clone(&self.kq);
         let wakers = Arc::clone(&self.wakers);
 
