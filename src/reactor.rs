@@ -3,6 +3,7 @@ use libc::{kevent, timespec};
 use crate::kqueue::Kqueue;
 use std::collections::HashMap;
 use std::os::fd::RawFd;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, mpsc};
 use std::task::Waker;
 use std::thread::{self, JoinHandle};
@@ -29,6 +30,7 @@ pub struct Reactor {
     listener_fd: RawFd,
     wakers: Arc<Mutex<HashMap<(RawFd, i16), Waker>>>,
     event_loop: Option<JoinHandle<()>>,
+    interrupt: Arc<AtomicBool>,
 }
 
 impl Reactor {
@@ -39,6 +41,7 @@ impl Reactor {
             listener_fd: fd,
             wakers: Arc::new(Mutex::new(HashMap::new())),
             event_loop: None,
+            interrupt: Arc::new(AtomicBool::new(false)),
         };
 
         reactor.event_loop();
@@ -67,6 +70,7 @@ impl Reactor {
     fn event_loop(&mut self) {
         let kq = Arc::clone(&self.kq);
         let wakers = Arc::clone(&self.wakers);
+        let interrupt = Arc::clone(&self.interrupt);
 
         let handle = thread::spawn(move || {
             let mut events = [unsafe { std::mem::zeroed::<kevent>() }; 1024];
@@ -90,9 +94,22 @@ impl Reactor {
                         waker.wake();
                     }
                 }
+
+                if interrupt.load(Ordering::Acquire) {
+                    break;
+                }
             }
         });
 
         self.event_loop = Some(handle);
+    }
+}
+
+impl Drop for Reactor {
+    fn drop(&mut self) {
+        self.interrupt.store(true, Ordering::Release);
+        if let Some(handle) = self.event_loop.take() {
+            handle.join().unwrap();
+        }
     }
 }
