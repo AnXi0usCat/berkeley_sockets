@@ -1,9 +1,11 @@
 use libc::{EVFILT_READ, EVFILT_WRITE, kevent, timespec};
 
 use crate::kqueue::Kqueue;
+use std::collections::HashMap;
 use std::os::fd::RawFd;
 use std::sync::{Arc, Mutex, mpsc};
-use std::thread;
+use std::task::Waker;
+use std::thread::{self, JoinHandle};
 
 #[derive(Debug, Clone)]
 pub enum Event {
@@ -25,38 +27,50 @@ pub type CmdTx = mpsc::Sender<Cmd>;
 pub struct Reactor {
     kq: Arc<Mutex<Kqueue>>,
     listener_fd: RawFd,
+    wakers: Arc<Mutex<HashMap<(RawFd, i16), Waker>>>,
+    event_loop: Option<JoinHandle<()>>,
 }
 
 impl Reactor {
     pub fn new(fd: RawFd) -> Result<Self, String> {
         let kq = Kqueue::new()?;
-        Ok(Reactor {
+        let mut reactor = Reactor {
             kq: Arc::new(Mutex::new(kq)),
             listener_fd: fd,
-        })
+            wakers: Arc::new(Mutex::new(HashMap::new())),
+            event_loop: None,
+        };
+
+        reactor.event_loop();
+        Ok(reactor)
     }
 
-    pub fn start(&self) -> (CmdTx, EventRx) {
-        let (cmd_tx, cmd_rx) = mpsc::channel();
-        let (event_tx, event_rx) = mpsc::channel();
-        let kq = self.kq.clone();
-        let listener_fd = self.listener_fd;
+    pub fn register(
+        &self,
+        fd: RawFd,
+        readable: bool,
+        oneshot: bool,
+        waker: &Waker,
+    ) -> Result<(), String> {
+        let filter = if readable {
+            libc::EVFILT_READ
+        } else {
+            libc::EVFILT_WRITE
+        };
+        self.wakers
+            .lock()
+            .unwrap()
+            .insert((fd, filter), waker.clone());
+        self.kq.lock().unwrap().add(fd, readable, oneshot)
+    }
 
-        thread::spawn(move || {
+    pub fn event_loop(&mut self) {
+        let kq = Arc::clone(&self.kq);
+        let wakers = Arc::clone(&self.wakers);
+
+        let handle = thread::spawn(move || {
             let mut events = [unsafe { std::mem::zeroed::<kevent>() }; 1024];
-
             loop {
-                while let Ok(cmd) = cmd_rx.try_recv() {
-                    match cmd {
-                        Cmd::Add(fd, readable, oneshot) => {
-                            kq.lock().unwrap().add(fd, readable, oneshot);
-                        }
-                        Cmd::Delete(fd, readable) => {
-                            kq.lock().unwrap().delete(fd, readable);
-                        }
-                    }
-                }
-
                 let n = kq
                     .lock()
                     .unwrap()
@@ -72,19 +86,13 @@ impl Reactor {
                 for e in &events[..n as usize] {
                     let fd = e.ident as RawFd;
                     let filter = e.filter;
-
-                    let event = match filter {
-                        EVFILT_READ if fd == listener_fd => Event::NewConnection(fd),
-                        EVFILT_READ => Event::Readable(fd),
-                        EVFILT_WRITE => Event::Writable(fd),
-                        _ => continue,
-                    };
-                    // send on best effort basis
-                    let _ = event_tx.send(event);
+                    if let Some(waker) = wakers.lock().unwrap().remove(&(fd, filter)) {
+                        waker.wake();
+                    }
                 }
             }
         });
 
-        (cmd_tx, event_rx)
+        self.event_loop = Some(handle);
     }
 }
