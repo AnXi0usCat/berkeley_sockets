@@ -40,7 +40,7 @@ impl AsyncTcpListener {
         sc.set_nonblocking(true)?;
         sc.listen(100)?;
 
-        let reactor = Reactor::new(sc.fd)?;
+        let reactor = Reactor::new()?;
 
         Ok(AsyncTcpListener {
             socket: sc,
@@ -59,6 +59,8 @@ impl AsyncTcpListener {
 #[derive(Debug)]
 pub struct AsyncTcpStream {
     socket: Socket,
+    reactor: Arc<Reactor>,
+
 }
 
 impl AsyncTcpStream {

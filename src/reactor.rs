@@ -11,18 +11,16 @@ use std::thread::{self, JoinHandle};
 #[derive(Debug)]
 pub struct Reactor {
     kq: Arc<Mutex<Kqueue>>,
-    listener_fd: RawFd,
     wakers: Arc<Mutex<HashMap<(RawFd, i16), Waker>>>,
     event_loop: Option<JoinHandle<()>>,
     interrupt: Arc<AtomicBool>,
 }
 
 impl Reactor {
-    pub fn new(fd: RawFd) -> Result<Self, String> {
+    pub fn new() -> Result<Self, String> {
         let kq = Kqueue::new()?;
         let mut reactor = Reactor {
             kq: Arc::new(Mutex::new(kq)),
-            listener_fd: fd,
             wakers: Arc::new(Mutex::new(HashMap::new())),
             event_loop: None,
             interrupt: Arc::new(AtomicBool::new(false)),
