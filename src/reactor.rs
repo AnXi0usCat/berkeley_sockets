@@ -4,25 +4,9 @@ use crate::kqueue::Kqueue;
 use std::collections::HashMap;
 use std::os::fd::RawFd;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, mpsc};
+use std::sync::{Arc, Mutex};
 use std::task::Waker;
 use std::thread::{self, JoinHandle};
-
-#[derive(Debug, Clone)]
-pub enum Event {
-    NewConnection(RawFd),
-    Readable(RawFd),
-    Writable(RawFd),
-}
-
-#[derive(Debug, Clone)]
-pub enum Cmd {
-    Add(RawFd, bool, bool),
-    Delete(RawFd, bool),
-}
-
-pub type EventRx = mpsc::Receiver<Event>;
-pub type CmdTx = mpsc::Sender<Cmd>;
 
 #[derive(Debug)]
 pub struct Reactor {
