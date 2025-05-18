@@ -16,7 +16,7 @@ impl<'a> Future for AcceptFuture<'a> {
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Self::Output> {
         match self.listener.accept_nonblocking() {
-            Ok(Some(socket)) => Poll::Ready(Ok(AsyncTcpStream::new(socket))),
+            Ok(Some(socket)) => Poll::Ready(Ok(AsyncTcpStream::new(socket, self.reactor.clone()))),
             Ok(None) => {
                 self.reactor
                     .register(self.listener.fd, true, false, cx.waker())?;
@@ -60,11 +60,17 @@ impl AsyncTcpListener {
 pub struct AsyncTcpStream {
     socket: Socket,
     reactor: Arc<Reactor>,
-
+    read_buf: Vec<u8>,
+    write_buf: Vec<u8>
 }
 
 impl AsyncTcpStream {
-    pub fn new(socket: Socket) -> Self {
-        AsyncTcpStream { socket }
+    pub fn new(socket: Socket, reactor: Arc<Reactor>) -> Self {
+        AsyncTcpStream { 
+            socket,
+            reactor,
+            read_buf: vec![0; 1024],
+            write_buf: Vec::new()
+        }
     }
 }
