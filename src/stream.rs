@@ -52,6 +52,28 @@ impl<'a> Future for ReadFuture<'a> {
     }
 }
 
+pub struct WriteFuture<'a> {
+    stream: &'a AsyncTcpStream,
+    buffer: &'a [u8],
+}
+
+impl<'a> Future for WriteFuture<'a> {
+    type Output = Result<usize, String>;
+
+    fn poll(self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> Poll<Self::Output> {
+        match self.stream.socket.send_nonblocking(self.buffer) {
+            Ok(Some(n)) => Poll::Ready(Ok(n)),
+            Ok(None) => {
+                self.stream
+                    .reactor
+                    .register(self.stream.socket.fd, false, false, cx.waker())?;
+                Poll::Pending
+            }
+            Err(e) => Poll::Ready(Err(e)),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct AsyncTcpListener {
     socket: Socket,
@@ -94,6 +116,13 @@ impl AsyncTcpStream {
 
     pub fn read<'a>(&'a self, buffer: &'a mut [u8]) -> ReadFuture<'a> {
         ReadFuture {
+            stream: self,
+            buffer,
+        }
+    }
+
+    pub fn write<'a>(&'a self, buffer: &'a [u8]) -> WriteFuture<'a> {
+        WriteFuture {
             stream: self,
             buffer,
         }
