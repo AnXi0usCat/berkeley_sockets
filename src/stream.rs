@@ -61,16 +61,16 @@ pub struct AsyncTcpStream {
     socket: Socket,
     reactor: Arc<Reactor>,
     read_buf: Vec<u8>,
-    write_buf: Vec<u8>
+    write_buf: Vec<u8>,
 }
 
 impl AsyncTcpStream {
     pub fn new(socket: Socket, reactor: Arc<Reactor>) -> Self {
-        AsyncTcpStream { 
+        AsyncTcpStream {
             socket,
             reactor,
             read_buf: vec![0; 1024],
-            write_buf: Vec::new()
+            write_buf: Vec::new(),
         }
     }
 }
