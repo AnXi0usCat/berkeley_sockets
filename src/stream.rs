@@ -1,17 +1,36 @@
 use std::sync::Arc;
+use std::task::Poll;
 
-use crate::reactor::{CmdTx, Event, EventRx};
-use crate::{
-    reactor::{Cmd, Reactor},
-    socket::Socket,
-};
+use crate::{reactor::Reactor, socket::Socket};
+
+pub struct AcceptFuture<'a> {
+    listener: &'a Socket,
+    reactor: Arc<Reactor>,
+}
+
+impl<'a> Future for AcceptFuture<'a> {
+    type Output = Result<AsyncTcpStream, String>;
+
+    fn poll(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Self::Output> {
+        match self.listener.accept_nonblocking() {
+            Ok(Some(socket)) => Poll::Ready(Ok(AsyncTcpStream::new(socket))),
+            Ok(None) => {
+                self.reactor
+                    .register(self.listener.fd, true, false, cx.waker())?;
+                Poll::Pending
+            }
+            Err(e) => Poll::Ready(Err(e)),
+        }
+    }
+}
 
 #[derive(Debug)]
 pub struct AsyncTcpListener {
     socket: Socket,
-    reactor: Reactor,
-    cmd_tx: CmdTx,
-    event_rx: Arc<EventRx>,
+    reactor: Arc<Reactor>,
 }
 
 impl AsyncTcpListener {
@@ -22,60 +41,28 @@ impl AsyncTcpListener {
         sc.listen(100)?;
 
         let reactor = Reactor::new(sc.fd)?;
-        let (tx, rx) = reactor.start();
-
-        tx.send(Cmd::Add(sc.fd, true, false))
-            .map_err(|_| "failed to add listener to kqueue")?;
 
         Ok(AsyncTcpListener {
             socket: sc,
-            reactor,
-            cmd_tx: tx,
-            event_rx: Arc::new(rx),
+            reactor: Arc::new(reactor),
         })
     }
 
-    pub async fn accept(&self) -> Result<AsyncTcpStream, String> {
-        while let Ok(event) = self.event_rx.try_recv() {
-            if let Event::NewConnection(_fd) = event {
-                if let Ok(client) = self.socket.accept_nonblocking() {
-                    match client {
-                        Some(socket) => {
-                            self.cmd_tx
-                                .send(Cmd::Add(socket.fd, true, false))
-                                .map_err(|e| {
-                                    format!("Failed to send client fd to the reactor: {e}")
-                                })?;
-                            return Ok(AsyncTcpStream::new(
-                                socket,
-                                self.cmd_tx.clone(),
-                                Arc::clone(&self.event_rx),
-                            ));
-                        }
-                        None => {
-                            continue;
-                        }
-                    }
-                };
-            };
+    pub fn accept(&self) -> AcceptFuture {
+        AcceptFuture {
+            listener: &self.socket,
+            reactor: self.reactor.clone(),
         }
-        Err("Stream channle is closed".into())
     }
 }
 
 #[derive(Debug)]
 pub struct AsyncTcpStream {
     socket: Socket,
-    cmd_tx: CmdTx,
-    event_rx: Arc<EventRx>,
 }
 
 impl AsyncTcpStream {
-    pub fn new(socket: Socket, cmd_tx: CmdTx, event_rx: Arc<EventRx>) -> Self {
-        AsyncTcpStream {
-            socket,
-            cmd_tx,
-            event_rx,
-        }
+    pub fn new(socket: Socket) -> Self {
+        AsyncTcpStream { socket }
     }
 }
